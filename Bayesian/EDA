@@ -1,6 +1,5 @@
 This is an EDA code for "Topics in Bayesian Statistics I" course final project.
 It is an prediction of data scientist's salary.
-
 Data from https://www.kaggle.com/datasets/nikhilbhathi/data-scientist-salary-us-glassdoor
 
 data0<-read.csv("/Users/heesung/Documents/23-1/Bayesian/final project/data_salary.csv")
