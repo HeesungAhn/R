@@ -1,3 +1,12 @@
+This is a final project for Theoretical Statistics II.
+This is a code for R shiny application calculating the car insurance premium through GLM.
+
+Input_driver information: region, type of car, mileage, merit(accident-free career)
+Input_insurance information: deductible, limit, exchange rate
+Output: insurance premium(won, dollar, krona), coefficient effect plot
+
+
+
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
