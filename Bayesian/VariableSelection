@@ -1,0 +1,162 @@
+This is an EDA code for "Topics in Bayesian Statistics I" course final project.
+It is an prediction of data scientist's salary.
+Data from https://www.kaggle.com/datasets/nikhilbhathi/data-scientist-salary-us-glassdoor
+This project introduced Gibbs variable selection through MCMC
+
+
+library(MASS)
+library(tidyverse)
+library(rjags)
+library(data.table)
+library(coda)
+data2<-data%>%select(Avg.Salary.K., Rating, Age, Size_num, Python, spark, 
+                     aws, excel, sql, sas, keras, pytorch,scikit, tensor, hadoop,
+                     tableau, bi, flink, mongo, google_an,seniority_by_title,
+                     ownership.class) 
+
+dummy.senior<-model.matrix(~seniority_by_title -1, data=data2)
+dummy.senior<-dummy.senior[,1]
+dummy.owner<-model.matrix(~ownership.class-1, data=data2)
+dummy.owner<-dummy.owner[,1]
+data3<-data2[,-c(21,22)]
+data3<-cbind(data3, dummy.senior, dummy.owner)
+str(data3) 
+
+lm.step<-lm(Avg.Salary.K.~., data=data2)
+a<-stepAIC(lm.step, direction="both")
+summary(a) #14 variables selected
+
+###############################################
+#Beysian variable selection
+n<-nrow(data3)
+x<-data3[,-1]
+X<-cbind(rep(1,n), x)
+k<-ncol(X)
+
+lm.out<-lm(Avg.Salary.K.~., data=data3)
+summary(lm.out) 
+
+mu.beta<-lm.out$coefficients[1:k]
+var.beta<-diag(vcov(lm.out))[1:k]
+
+##pseudo prior:gamma==0(v.s X) selected
+pseudo.beta.mean<-mu.beta 
+pseudo.beta.var<-var.beta
+
+##prior: gamma==1(v.s O) selected
+prior.beta.var<-var.beta*100
+prior.beta.mean<-rep(0, k)
+
+modelString ="model {
+#response 
+for(i in 1:n){
+  y[i] ~ dnorm(mu[i], invsigsq)
+  mu[i] <- inprod(X[i,1:k], gbeta[1:k])
+}
+
+#gibbs prior
+for(j in 1:k){ 
+  gbeta[j]<- gamma[j]*beta[j] } 
+for(j in 1:k){
+  gamma[j] ~ dbern(0.5) }
+
+#lm coef
+for(j in 1:k){
+  beta[j]~ dnorm( m.b[j], tau.b[j])
+  m.b[j] <- gamma[j]*prior.beta.mean[j]+(1- gamma[j])* pseudo.beta.mean[j]
+  tau.b[j]<- gamma[j]/prior.beta.var[j]+(1-gamma[j])/pseudo.beta.var[j]
+}
+
+#variance 
+invsigsq ~ dgamma(0.01, 0.01)
+}
+"
+
+dataList=list(n=n,k=k, y=data3$Avg.Salary.K., X=X, pseudo.beta.mean=pseudo.beta.mean, 
+              pseudo.beta.var=pseudo.beta.var, prior.beta.var=prior.beta.var, 
+              prior.beta.mean= prior.beta.mean )
+gammaInit=rep(1,k)
+initsList=list(beta=mu.beta, gamma=gammaInit)
+nChains=3
+jagsModel=jags.model( textConnection(modelString), data=dataList, inits=initsList,
+                      n.chains=nChains, n.adapt=3000) 
+update(jagsModel, n.iter=10000)
+codaSamples=coda.samples(jagsModel, variable.names=c("gamma", "beta"),
+                         n.chains=nChains,n.iter=10000)
+para.samples=as.matrix(codaSamples) 
+head(para.samples)
+beta.samples= para.samples[, 1:k] 
+gamma.samples=para.samples[, (k+1):(k+k)]
+
+
+m=gamma.samples
+mm=as.data.table(m)[, .N, by = eval(paste0("gamma[", seq_len(ncol(m)), "]"))] 
+colnames(mm)=c("g0","g1","g2","g3","g4","g5","g6","g7","g8","g9","g10",
+               "g11","g12","g13","g14","g15","g16","g17","g18","g19",
+               "g20","g21","N")
+mm.order=order(mm$N, decreasing=T) 
+mm$N=round( mm$N/(nIter*nChains),4)
+gamma.hat=as.numeric(mm[which.max(mm$N)]) 
+gamma.hat=gamma.hat[1:k]
+gamma.hat
+mm[mm.order[1:10]]
+
+gamma.samples.collapsed<-apply(gamma.samples, 1, 
+                               function(x) paste(x, collapse=" "))
+gamma.hat.collapsed<-paste(gamma.hat, collapse=" ") 
+id.selected=which(gamma.samples.collapsed==gamma.hat.collapsed) 
+length(id.selected)
+
+beta.samples.selected=beta.samples[id.selected,] 
+colnames(beta.samples.selected)=c("b0","b1","b2","b3","b4","b5","b6","b7",
+                                  "b8","b9","b10","b11","b12","b13","b14",
+                                  "b15","b16","b17","b18","b19","b20","b21") 
+beta.samples.selected2=beta.samples.selected[,gamma.hat==1] 
+head(beta.samples.selected2) 
+beta.selected.hat=apply(beta.samples.selected2,2,
+                        function(x)quantile(x, c(0.025,0.5, 0.975)))
+t(beta.selected.hat)
+
+##convergence diagnosis
+#trace plot
+para.names<-variable.names(codaSamples[[1]])
+par(mfrow=c(3,3))
+for(i in 1:k){
+  traceplot( codaSamples[,i] , main=para.names[i] , ylab=para.names[i] ) 
+}
+
+#acf
+par(mfrow=c(3,3))
+for(i in 1:k){
+  acf(codaSamples[,i][[1]],plot=T, main=para.names[i])
+}
+
+#gelman
+ESS<-effectiveSize(codaSamples); ESS
+gelman<-gelman.diag(codaSamples[,-c(k+1, k+5, k+21)]); gelman
+gelman.plot(codaSamples[,-c(k+1, k+5, k+21)]) 
+
+
+#density plot
+MCMCSamples=as.matrix(codaSamples)
+HPD= round(apply(MCMCSamples, 2, quantile, probs = c(0.025, 0.975)),4)
+par(mfrow=c(3,3))
+for(i in 1:k) {
+  plot(density(MCMCSamples[,i]), main="",xlab=para.names[i]) 
+  abline( v=HPD[,i],col=2)
+}
+
+
+
+
+
+
+#traceplot(codaSamples)
+#autocorr.plot(codaSamples)
+densplot(codaSamples)
+
+
+
+
+
+
