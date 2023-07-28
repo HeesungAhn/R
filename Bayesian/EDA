@@ -1,0 +1,228 @@
+This is an EDA code for "Topics in Bayesian Statistics I" course final project.
+It is an prediction of data scientist's salary.
+
+Data from https://www.kaggle.com/datasets/nikhilbhathi/data-scientist-salary-us-glassdoor
+
+data0<-read.csv("/Users/heesung/Documents/23-1/Bayesian/final project/data_salary.csv")
+library(tidyverse)
+library(corrplot)
+attach(data)
+str(data0)
+#remove hourly==1
+data<-data0%>%select(Avg.Salary.K., Rating, Size, Type.of.ownership, Industry, Sector, Revenue,
+                     Hourly, Job.Location, Age, Python, spark, aws, excel, sql, sas, keras, 
+                     pytorch, scikit, tensor, hadoop, tableau, bi, flink, mongo, google_an,
+                     seniority_by_title, Degree)%>%filter(Hourly==0)
+
+#####Response: avg.salary#####
+sum(is.na(data$Avg.Salary.K.))
+quantile(data$Avg.Salary.K.)
+mean(data$Avg.Salary.K.)
+hist(data$Avg.Salary.K.)
+ggplot(data, aes(x=Avg.Salary.K.))+
+  geom_histogram(aes(y=..density..), binwidth=5, 
+                 color="black", fill="white")+
+  geom_density(alpha=0.2, fill="red")+
+  labs(title="Distribution of Average Salary(K) :Response")
+
+#####Rating#####
+hist(data$Rating)
+sum(data$Rating==-1) #na 11개
+hist(data$Rating[data$Rating!=-1])
+mean(data$Rating[data$Rating!=-1])
+med_rating<-median(data$Rating[data$Rating!=-1])
+#na median=3.7로 대체
+data$Rating[data$Rating==-1]<-med_rating
+#hist(data$Rating, main="Histogram of Company Rating")
+ggplot(data, aes(x=Rating))+
+  geom_bar()+
+  labs(title="Histogram of Company Rating")
+plot(data$Rating,  data$Avg.Salary.K.)
+
+#####Size#####
+unique(Size)
+table(Size)
+#size categorical var
+data<-data%>%mutate(Size_class=case_when(Size=="1 - 50 "~1,
+                                         Size=="51 - 200 "~2,
+                                         Size=="201 - 500 "~3,
+                                         Size=="501 - 1000 "~4,
+                                         Size=="1001 - 5000 "~5,
+                                         Size=="5001 - 10000 "~6,
+                                         Size=="10000+ "~7))
+                                                        
+#sum(is.na(data3$Size_class)) #na 10개
+#table(na.omit(data3$Size_class))
+#median(na.omit(data3$Size_class))
+#mean(na.omit(data3$Size_class))
+##replace na into 4
+#data3$Size_class[is.na(data3$Size_class)]<-4
+#data3$Size_class<-as.factor(data3$Size_class)
+#barplot(table(data3$Size_class), main="Histogram of Size")
+ggplot(data, aes(x=Size_class, fill=Size_class))+
+  geom_bar()+
+  labs(title="Histogram of Company Size")+
+  scale_fill_discrete(labels=c("1-50", "51-200", "201-500", "501-1000", "1001-5000", "5001-10000", "10000+"))
+plot(data$Size_class, data$Avg.Salary.K.)
+
+#size categorical(s/m/l)
+data<-data%>%mutate(size.type=case_when(Size_class<=3~"S",
+                                        Size_class==4~"M",
+                                        Size_class==5~"M",
+                                        Size_class>=6~"L"))
+data$size.type<-factor(data$size.type, levels=c("S", "M", "L"))
+table(data$size.type)
+sum(is.na(data$size.type)) #na 10개
+data$size.type[is.na(data$size.type)]<-"M"
+sum(is.na(data$size.type))
+ggplot(data, aes(x=size.type, fill=size.type))+
+  geom_bar()+
+  labs(title="Histogram of Company Size")+
+  scale_fill_discrete(labels=c("S 1-500", "M 501-5000", "L 5001+"))
+plot(data$size.type, data$Avg.Salary.K.)
+
+#size numerical
+data<-data%>%mutate(Size_num=case_when(Size=="1 - 50 "~25.5,
+                                       Size=="51 - 200 "~125.5,
+                                       Size=="201 - 500 "~350.5,
+                                       Size=="501 - 1000 "~750.5,
+                                       Size=="1001 - 5000 "~3000.5,
+                                       Size=="5001 - 10000 "~7500.5,
+                                       Size=="10000+ "~10000))
+table(data$Size_num)
+mean(na.omit(data$Size_num))
+med<-median(na.omit(data$Size_num))
+data$Size_num[is.na(data$Size_num)]<-med
+sum(is.na(data$Size_num))
+plot(data$Size_num, data$Avg.Salary.K.)
+
+#####Type of Ownership#####
+unique(data$Type.of.ownership)
+table(data$Type.of.ownership)
+data$Type.of.ownership<-as.factor(data$Type.of.ownership)
+ggplot(data, aes(x=Type.of.ownership, fill=Type.of.ownership))+
+  geom_bar()+
+  labs(title="Histogram of Ownership Type", x="")+
+  scale_x_discrete(labels=NULL, breaks=NULL)
+data<-data%>%mutate(ownership.class=
+                        ifelse(Type.of.ownership=="Company - Private"|Type.of.ownership=="Subsidiary or Business Segment","Private", "Public"))
+data$ownership.class<-as.factor(data$ownership.class)
+table(data$ownership.class)
+ggplot(data, aes(x=ownership.class, fill=ownership.class))+
+  geom_bar()+
+  labs(title="Histogram of Ownership Type")
+plot(data$ownership.class, data$Avg.Salary.K.)
+
+#####Industry/Sector#####
+unique(data$Sector)
+sum(data$Sector==-1)
+data[data$Sector==-1,]
+#na imputation
+data[data$Sector==-1,]$Sector<-c("Health Care", "Information Technology", "Biotech & Pharmaceuticals", "Biotech & Pharmaceuticals",
+                                   "Information Technology", "Biotech & Pharmaceuticals", "Biotech & Pharmaceuticals", "Biotech & Pharmaceuticals", 
+                                   "Biotech & Pharmaceuticals", "Biotech & Pharmaceuticals")
+sum(data$Sector==-1)
+data$Sector<-as.factor(data$Sector)
+data1<-data%>%group_by(Sector)%>%summarise(n=n())%>%mutate(p=n/sum(n)*100)
+ggplot(data1, aes(x="", y=p, fill=Sector))+
+  geom_bar(stat='identity')+
+  coord_polar('y', start=0)+
+  theme_void()+
+  geom_text(aes(label=paste0(round(p,0), '%')),
+            position=position_stack(vjust=0.5))
+
+plot(data$Sector, data$Avg.Salary.K.)
+
+############################Revenue####################################
+unique(data$Revenue)
+sum(data$Revenue=="Unknown / Non-Applicable" )
+table(data$Revenue)
+#numerical var
+data<-data%>%mutate(revenue.num=case_when(Revenue=="Less than $1 million (USD)"~1,
+                                          Revenue=="$1 to $5 million (USD)"~3,
+                                          Revenue=="$5 to $10 million (USD)"~7.5,
+                                          Revenue=="$10 to $25 million (USD)"~17.5,
+                                          Revenue=="$25 to $50 million (USD)"~37.5,
+                                          Revenue=="$50 to $100 million (USD)"~75,
+                                          Revenue=="$100 to $500 million (USD)"~300,
+                                          Revenue=="$500 million to $1 billion (USD)"~750,
+                                          Revenue=="$1 to $2 billion (USD)"~1500,
+                                          Revenue=="$2 to $5 billion (USD)"~3500,
+                                          Revenue=="$5 to $10 billion (USD)"~7500,
+                                          Revenue=="$10+ billion (USD)"~10000))
+hist(na.omit(data$revenue.num), breaks=80)
+mean(na.omit(data$revenue.num))
+median(na.omit(data$revenue.num))
+
+table(data$revenue.num)#대표성 없음
+sum(is.na(data$revenue.num))
+plot(data$revenue.num, data$Avg.Salary.K.)
+
+#####job location#####
+sum(is.na(data$Job.Location))
+
+#####Age#####
+hist(data$Age)
+sum(is.na(data$Age))
+mean(data$Age)
+median(data$Age)
+ggplot(data, aes(x=Age))+
+  geom_histogram(aes(y=..density..), binwidth=5, 
+                 color="black", fill="white")+
+  geom_density(alpha=0.2, fill="red")+
+  labs(title="Distribution of Age")
+plot(data$Age, data$Avg.Salary.K.)
+
+#####skills#####
+skill.p<-colSums(data[,11:26])/nrow(data)
+pdata<-data.frame(skill=c("Python", "spark", "aws", "excel", "sql", "sas", "keras", "pytorch", "scikit",
+                          "tensor", "hadoop", "tableau", "bi", "flink", "mongo", "google_an"), 
+                  weight=skill.p)
+pdata
+ggplot(pdata, aes(y=skill, x=weight, fill=weight))+
+  geom_col()+
+  scale_y_discrete(limits=rev(c("Python", "spark", "aws", "excel", "sql", "sas", "keras", "pytorch", "scikit",
+                           "tensor", "hadoop", "tableau", "bi", "flink", "mongo", "google_an")))+
+  scale_x_continuous(labels=scales::percent)+
+  labs(title="Proportion of Skills Required at Company")
+
+#correlation matrix
+df<-data%>%select(Python, spark, aws, excel, sql, sas, keras, pytorch,
+                  scikit, tensor, hadoop, tableau, bi, flink, mongo, google_an)
+corrplot(cor(df))
+
+#####seniority by title#####
+table(data$seniority_by_title)
+data$seniority_by_title[data$seniority_by_title=="na"]<-"jr"
+data$seniority_by_title<-as.factor(data$seniority_by_title)
+ggplot(data, aes(x=seniority_by_title, fill=seniority_by_title))+
+  geom_bar()+
+  labs(title="Histogram of Senior/Junior")
+plot(data$seniority_by_title, data$Avg.Salary.K.)
+
+#####Degree#####
+table(data$Degree)
+data$Degree[data$Degree=="na"]<-"B"
+data$Degree<-as.factor(data$Degree)
+ggplot(data, aes(x=Degree, fill=Degree))+
+  geom_bar()+
+  labs(title="Histogram of Degree")+
+  scale_fill_discrete(labels=c("Bachelor's degree", "Master", "Ph.D"))
+plot(data$Degree, data$Avg.Salary.K.)
+
+
+data2<-data%>%select(Avg.Salary.K., Rating, Age, Size_num, Python, spark, 
+                     aws, excel, sql, sas, keras, pytorch,scikit, tensor, hadoop,
+                     tableau, bi, flink, mongo, google_an,seniority_by_title,
+                     ownership.class)
+
+glm(Avg.Salary.K.~., data=data2)
+a<-step(lm(Avg.Salary.K.~., data=data2),
+     scope=list(lower=~1, upper=~Rating+Age+Size_num+Python+spark+
+                                   aws+excel+sql+sas+keras+pytorch+scikit+ 
+                                   tensor+hadoop+tableau+bi+flink+mongo+ 
+                                   google_an+seniority_by_title+ownership.class),
+     direction="both")
+summary(a)
+library(epitools)
+oddsratio(data$Python, data$excel)
