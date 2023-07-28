@@ -6,7 +6,6 @@ Input_insurance information: deductible, limit, exchange rate
 Output: insurance premium(won, dollar, krona), coefficient effect plot
 
 
-
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
